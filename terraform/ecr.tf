@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Registro de imagens da API
 #
-# A pipeline do repositório GearUp publica aqui uma imagem por commit (tag =
+# A pipeline do repositório gearup-api publica aqui uma imagem por commit (tag =
 # SHA). Tags imutáveis garantem que um rollback volte exatamente ao binário
 # testado. `force_delete` permite o destroy do lab mesmo com imagens.
 # ---------------------------------------------------------------------------

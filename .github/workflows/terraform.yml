@@ -9,7 +9,7 @@
 # Por que homolog só faz plan: o cluster EKS é compartilhado pelos dois
 # ambientes da aplicação (namespaces gearup-homolog e gearup-production).
 # Um segundo cluster dobraria o custo fixo (US$ 0,10/h 24/7) no Learner Lab.
-# Ver RFC-001 no repositório GearUp.
+# Ver RFC-001 no repositório gearup-api.
 #
 # Secrets do repositório (Settings -> Secrets and variables -> Actions):
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN  (Learner Lab)
