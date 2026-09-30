@@ -19,7 +19,7 @@ Faz parte de uma plataforma de 4 repositórios:
 | **gearup-infra-k8s** (este) | rede, cluster, registro de imagens, observabilidade |
 | [gearup-infra-db](https://github.com/SOAT-GearUp/gearup-infra-db) | RDS PostgreSQL (usa a VPC deste repo) |
 | [gearup-api](https://github.com/SOAT-GearUp/gearup-api) | API, deploy no cluster, documentação arquitetural |
-| [gearup-lambda-auth](https://github.com/SOAT-GearUp/gearup-lambda-auth) | Lambda de autenticação por CPF e API Gateway |
+| [gearup-lambda-auth](https://github.com/SOAT-GearUp/gearup-lambda-auth) | Lambda de autenticação (CPF e senha) e API Gateway |
 
 ## Arquitetura
 
