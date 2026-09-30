@@ -1,0 +1,10 @@
+# Copie para terraform.tfvars (NÃO versionado) apenas se quiser mudar defaults.
+# A chave do Datadog NÃO deve ir para arquivo: use a variável de ambiente
+#   $env:TF_VAR_datadog_api_key = "..."   (PowerShell)
+#   export TF_VAR_datadog_api_key=...     (bash)
+
+# tipo_instancia_nos = "t3.medium"
+# nos_desejados      = 2
+# nos_maximos        = 3
+# datadog_site       = "us5.datadoghq.com"
+# cidrs_acesso_api_kubernetes = ["203.0.113.10/32"]

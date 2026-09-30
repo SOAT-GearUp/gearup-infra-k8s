@@ -1,0 +1,189 @@
+# ---------------------------------------------------------------------------
+# CI/CD da infraestrutura Kubernetes (EKS)
+#
+#   Pull Request ............ fmt + validate + plan (resultado no resumo do job)
+#   push em homolog ......... fmt + validate + plan  -> ambiente "homolog"
+#   push em main ............ apply do cluster + apply do Datadog -> "production"
+#   workflow_dispatch ....... plan | apply | destroy manual
+#
+# Por que homolog só faz plan: o cluster EKS é compartilhado pelos dois
+# ambientes da aplicação (namespaces gearup-homolog e gearup-production).
+# Um segundo cluster dobraria o custo fixo (US$ 0,10/h 24/7) no Learner Lab.
+# Ver RFC-001 no repositório GearUp.
+#
+# Secrets do repositório (Settings -> Secrets and variables -> Actions):
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN  (Learner Lab)
+#   DATADOG_API_KEY, DATADOG_APP_KEY                              (opcionais)
+# ---------------------------------------------------------------------------
+name: Terraform (EKS)
+
+on:
+  pull_request:
+    branches: [main, homolog]
+  push:
+    branches: [main, homolog]
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "Ação do Terraform"
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-infra-k8s
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_VERSION: "1.15.8"
+  AWS_REGION: us-east-1
+
+jobs:
+  validar:
+    name: Formatação e validação
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+      - name: terraform validate
+        run: |
+          for dir in terraform datadog; do
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+          done
+
+  plan:
+    name: Plan (homolog)
+    needs: validar
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/homolog' ||
+      (github.event_name == 'workflow_dispatch' && inputs.acao == 'plan')
+    runs-on: ubuntu-latest
+    environment: homolog
+    env:
+      TF_VAR_datadog_api_key: ${{ secrets.DATADOG_API_KEY }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Verificar credenciais do Learner Lab
+        env:
+          CHAVE: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          if [ -z "$CHAVE" ]; then
+            echo "::error::Configure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN (Learner Lab -> AWS Details -> AWS CLI)."
+            exit 1
+          fi
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: terraform init
+        run: bash scripts/tf-init.sh terraform
+      - name: terraform plan
+        run: |
+          terraform -chdir=terraform plan -input=false -no-color -out=tfplan | tee plan.txt
+          {
+            echo "### Terraform plan (EKS)"
+            echo '```'
+            grep -E '^(Plan:|No changes)' plan.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Apply (produção)
+    needs: validar
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.acao == 'apply')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      TF_VAR_datadog_api_key: ${{ secrets.DATADOG_API_KEY }}
+      DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+      DD_APP_KEY: ${{ secrets.DATADOG_APP_KEY }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Verificar credenciais do Learner Lab
+        env:
+          CHAVE: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          if [ -z "$CHAVE" ]; then
+            echo "::error::Configure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN (Learner Lab -> AWS Details -> AWS CLI)."
+            exit 1
+          fi
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: terraform init
+        run: bash scripts/tf-init.sh terraform
+      - name: terraform apply (cluster, rede, ECR, observabilidade)
+        run: terraform -chdir=terraform apply -input=false -auto-approve
+      - name: Resumo
+        run: |
+          {
+            echo "### Cluster provisionado"
+            echo '```'
+            terraform -chdir=terraform output
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Dashboards e monitores do Datadog
+        if: env.DD_APP_KEY != ''
+        run: |
+          bash scripts/tf-init.sh datadog
+          terraform -chdir=datadog apply -input=false -auto-approve
+          echo "Dashboard: $(terraform -chdir=datadog output -raw url_dashboard)" >> "$GITHUB_STEP_SUMMARY"
+
+  destroy:
+    name: Destroy (fim da sessão do lab)
+    if: github.event_name == 'workflow_dispatch' && inputs.acao == 'destroy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      TF_VAR_datadog_api_key: ${{ secrets.DATADOG_API_KEY }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Remover Load Balancers criados pelo Kubernetes
+        # Services do tipo LoadBalancer criam NLBs fora do Terraform. Se
+        # sobrarem, a VPC não pode ser apagada (DependencyViolation).
+        run: |
+          if aws eks describe-cluster --name gearup-eks >/dev/null 2>&1; then
+            aws eks update-kubeconfig --name gearup-eks --region "$AWS_REGION"
+            kubectl delete namespace gearup-homolog gearup-production --ignore-not-found --wait=true --timeout=300s || true
+          fi
+      - name: terraform destroy
+        run: |
+          bash scripts/tf-init.sh terraform
+          terraform -chdir=terraform destroy -input=false -auto-approve
