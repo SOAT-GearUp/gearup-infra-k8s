@@ -27,6 +27,14 @@ locals {
       alerta   = null
       mensagem = "A API registrou erros não tratados. Abra o log e siga o trace_id / X-Correlation-ID até a requisição de origem."
     }
+    http_404 = {
+      nome     = "[GearUp] Respostas HTTP 404 acima do esperado em {{resource_name.name}}"
+      tipo     = "query alert"
+      query    = "sum(last_5m):sum:trace.http.server.request.hits{${local.filtro_api},http.status_code:404} by {resource_name}.as_count() > 8"
+      critico  = 8
+      alerta   = 6
+      mensagem = "A rota {{resource_name.name}} retornou {{value}} respostas HTTP 404 nos últimos 5 minutos. Verifique rotas inválidas, parâmetros incorretos e recursos não encontrados."
+    }
     latencia = {
       nome     = "[GearUp] Latência p95 da API acima de 1s"
       tipo     = "query alert"
