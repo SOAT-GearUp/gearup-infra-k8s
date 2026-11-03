@@ -38,7 +38,7 @@ locals {
     latencia = {
       nome     = "[GearUp] Latência p95 da API acima de 1s"
       tipo     = "query alert"
-      query    = "percentile(last_10m):p95:http.server.request.duration{${local.filtro_api}} > 1"
+      query    = "percentile(last_10m):p95:http.server.request.duration{${local.filtro_api},!http.route:/health/*} > 1"
       critico  = 1
       alerta   = 0.5
       mensagem = "p95 da latência HTTP em {{value}}s. Verifique CPU dos pods e réplicas do HPA no dashboard."
@@ -46,7 +46,7 @@ locals {
     cpu = {
       nome     = "[GearUp] CPU dos pods da API acima de 80% do limite"
       tipo     = "query alert"
-      query    = "avg(last_10m):avg:kubernetes.cpu.usage.total{kube_namespace:${var.namespace_kubernetes},kube_deployment:gearup-api} by {pod_name} > 400000000"
+      query    = "avg(last_10m):avg:container.cpu.usage{kube_namespace:${var.namespace_kubernetes},kube_deployment:gearup-api} by {pod_name} > 400000000"
       critico  = 400000000
       alerta   = 300000000
       mensagem = "Pod {{pod_name.name}} usando {{value}} nanocores (limite 500m). Se persistir com o HPA no teto, aumente maxReplicas ou os nós."
@@ -54,7 +54,7 @@ locals {
     memoria = {
       nome     = "[GearUp] Memória dos pods da API acima de 85% do limite"
       tipo     = "query alert"
-      query    = "avg(last_10m):avg:kubernetes.memory.usage{kube_namespace:${var.namespace_kubernetes},kube_deployment:gearup-api} by {pod_name} > 456340275"
+      query    = "avg(last_10m):avg:container.memory.usage{kube_namespace:${var.namespace_kubernetes},kube_deployment:gearup-api} by {pod_name} > 456340275"
       critico  = 456340275
       alerta   = 402653184
       mensagem = "Pod {{pod_name.name}} usando {{value}} bytes de memória (limite 512Mi). Risco de OOMKill."
