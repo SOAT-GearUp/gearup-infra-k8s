@@ -14,7 +14,8 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  f = "service:${var.servico},$env"
+  f      = "service:${var.servico},$env"
+  f_http = "${local.f},!http.route:/health/*"
 
   series = {
     os_criadas_dia = {
@@ -40,37 +41,37 @@ locals {
     respostas_5xx = {
       titulo = "Respostas 5xx da API (falha de banco ou dependência)"
       tipo   = "bars"
-      query  = "count:http.server.request.duration{${local.f},http.response.status_code:5*} by {http.route}.as_count()"
+      query  = "count:http.server.request.duration{${local.f_http},http.response.status_code:5*} by {http.route}.as_count()"
     }
     latencia_p95 = {
       titulo = "Latência p95 por rota (s)"
       tipo   = "line"
-      query  = "p95:http.server.request.duration{${local.f}} by {http.route}"
+      query  = "p95:http.server.request.duration{${local.f_http}} by {http.route}"
     }
     latencia_p50 = {
       titulo = "Latência p50 geral (s)"
       tipo   = "line"
-      query  = "p50:http.server.request.duration{${local.f}}"
+      query  = "p50:http.server.request.duration{${local.f_http}}"
     }
     requisicoes = {
       titulo = "Requisições por status HTTP"
       tipo   = "bars"
-      query  = "count:http.server.request.duration{${local.f}} by {http.response.status_code}.as_count()"
+      query  = "count:http.server.request.duration{${local.f_http}} by {http.response.status_code}.as_count()"
     }
     cpu_pods = {
       titulo = "CPU por pod (nanocores)"
       tipo   = "line"
-      query  = "avg:kubernetes.cpu.usage.total{kube_deployment:gearup-api,$env} by {pod_name}"
+      query  = "avg:container.cpu.usage{kube_deployment:gearup-api,$env} by {pod_name}"
     }
     memoria_pods = {
       titulo = "Memória por pod (bytes)"
       tipo   = "line"
-      query  = "avg:kubernetes.memory.usage{kube_deployment:gearup-api,$env} by {pod_name}"
+      query  = "avg:container.memory.usage{kube_deployment:gearup-api,$env} by {pod_name}"
     }
     replicas = {
       titulo = "Réplicas disponíveis da API (HPA)"
       tipo   = "line"
-      query  = "avg:kubernetes_state.deployment.replicas_available{kube_deployment:gearup-api,$env} by {kube_namespace}"
+      query  = "avg:kubernetes_state.deployment.replicas_available{kube_namespace:${var.namespace_kubernetes},kube_deployment:gearup-api} by {kube_namespace}"
     }
     tempo_resposta_health = {
       titulo = "Tempo de resposta do /health/ready (s)"
@@ -106,9 +107,9 @@ locals {
 
   valor_24h = {
     for titulo, query in {
-      "OS criadas (24h)"   = "sum:gearup.ordens_servico.criadas{${local.f}}.as_count()"
-      "Erros da API (24h)" = "sum:gearup.api.erros{${local.f}}.as_count()"
-      "Requisições (24h)"  = "count:http.server.request.duration{${local.f}}.as_count()"
+      "OS criadas (24h)"             = "sum:gearup.ordens_servico.criadas{${local.f}}.as_count()"
+      "Erros da API (24h)"           = "sum:gearup.api.erros{${local.f}}.as_count()"
+      "Requisições funcionais (24h)" = "count:http.server.request.duration{${local.f_http}}.as_count()"
       } : titulo => {
       definition = {
         title     = titulo
