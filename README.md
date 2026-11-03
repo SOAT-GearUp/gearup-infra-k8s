@@ -74,6 +74,7 @@ Workflow [`terraform.yml`](.github/workflows/terraform.yml):
 | Pull Request | `fmt -check`, `validate` (cluster e Datadog), `plan` | homolog |
 | push `homolog` | idem + `plan` contra a conta real | homolog |
 | push `main` (só via PR) | `apply` do cluster + `apply` do Datadog (se houver `DATADOG_APP_KEY`) | production |
+| Run workflow → `plan` / `apply` | `plan` (job *Plan (homolog)*) ou `apply` (job *Apply (produção)*); os demais jobs aparecem como *skipped* | homolog / production |
 | Run workflow → `destroy` | remove namespaces da aplicação (NLBs) e faz `destroy` | production |
 
 O cluster é compartilhado pelos ambientes da aplicação (namespaces), por isso `homolog` valida com `plan` e só `main` aplica — decisão de custo na [RFC-001](https://github.com/SOAT-GearUp/gearup-api/blob/master/docs/fase-3/RFC/RFC-001%20-%20Nuvem%20e%20estrategia%20de%20ambientes.md).
