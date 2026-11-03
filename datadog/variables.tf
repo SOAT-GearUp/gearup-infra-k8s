@@ -1,7 +1,7 @@
 variable "datadog_site" {
   description = "Site do Datadog (datadoghq.com, us5.datadoghq.com, datadoghq.eu...)."
   type        = string
-  default     = "us5.datadoghq.com"
+  default     = "datadoghq.com"
 }
 
 variable "servico" {
